@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem Màn Hình</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .connect-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .input-group {
+            margin: 20px 0;
+        }
+
+        input[type="text"] {
+            padding: 12px 20px;
+            font-size: 1em;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            width: 100%;
+            max-width: 400px;
+            margin: 10px 0;
+        }
+
+        input[type="text"]::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #764ba2;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn {
+            padding: 12px 30px;
+            font-size: 1em;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            margin: 0 10px;
+        }
+
+        .btn-connect {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-connect:hover {
+            background: #45a049;
+        }
+
+        .btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+
+        .status.waiting {
+            background: #ff9800;
+        }
+
+        .status.connected {
+            background: #4CAF50;
+        }
+
+        .status.error {
+            background: #f44336;
+        }
+
+        #remoteVideo {
+            width: 100%;
+            max-width: 100%;
+            border-radius: 10px;
+            background: #000;
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .info {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👁️ Xem Màn Hình Được Chia Sẻ</h1>
+        
+        <div id="status" class="status waiting">Nhập ID của người chia sẻ để kết nối</div>
+
+        <div class="connect-section" id="connectSection">
+            <h2>Kết Nối</h2>
+            <div class="input-group">
+                <input type="text" id="peerIdInput" placeholder="Nhập ID của người chia sẻ">
+            </div>
+            <button id="connectBtn" class="btn btn-connect">Kết Nối</button>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Đang kết nối...</p>
+        </div>
+
+        <video id="remoteVideo" autoplay playsinline></video>
+
+        <div class="info">
+            <p>📺 Màn hình sẽ hiển thị ở đây sau khi kết nối thành công</p>
+        </div>
+    </div>
+
+    <script>
+        let peer = null;
+        let currentCall = null;
+        const remoteVideo = document.getElementById('remoteVideo');
+        const status = document.getElementById('status');
+        const loading = document.getElementById('loading');
+        const connectSection = document.getElementById('connectSection');
+        const peerIdInput = document.getElementById('peerIdInput');
+        const connectBtn = document.getElementById('connectBtn');
+
+        // Khởi tạo PeerJS
+        function initPeer() {
+            peer = new Peer({
+                host: '0.peerjs.com',
+                port: 443,
+                path: '/',
+                secure: true
+            });
+
+            peer.on('open', (id) => {
+                console.log('Viewer Peer ID:', id);
+            });
+
+            peer.on('error', (err) => {
+                console.error('Peer error:', err);
+                status.textContent = 'Lỗi kết nối: ' + err.message;
+                status.className = 'status error';
+                loading.style.display = 'none';
+                connectSection.style.display = 'block';
+            });
+        }
+
+        connectBtn.addEventListener('click', connectToPeer);
+        peerIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                connectToPeer();
+            }
+        });
+
+        function connectToPeer() {
+            const peerId = peerIdInput.value.trim();
+            if (!peerId) {
+                alert('Vui lòng nhập ID của người chia sẻ');
+                return;
+            }
+
+            if (!peer) {
+                initPeer();
+            }
+
+            connectSection.style.display = 'none';
+            loading.style.display = 'block';
+            status.textContent = 'Đang kết nối...';
+            status.className = 'status waiting';
+
+            // Đợi peer sẵn sàng
+            const checkPeer = () => {
+                if (peer && peer.open) {
+                    makeCall(peerId);
+                } else if (peer) {
+                    peer.once('open', () => {
+                        makeCall(peerId);
+                    });
+                } else {
+                    setTimeout(checkPeer, 100);
+                }
+            };
+            checkPeer();
+        }
+
+        function makeCall(peerId) {
+            try {
+                // Đợi peer sẵn sàng trước khi gọi
+                const waitForPeer = () => {
+                    if (peer && peer.open) {
+                        // Gọi người chia sẻ (không cần stream vì chỉ nhận)
+                        currentCall = peer.call(peerId);
+
+                        if (!currentCall) {
+                            throw new Error('Không thể kết nối. Kiểm tra lại ID hoặc đợi người chia sẻ bắt đầu.');
+                        }
+
+                        currentCall.on('stream', (remoteStream) => {
+                            console.log('Nhận được stream');
+                            remoteVideo.srcObject = remoteStream;
+                            remoteVideo.style.display = 'block';
+                            loading.style.display = 'none';
+                            status.textContent = 'Đã kết nối - Đang xem màn hình';
+                            status.className = 'status connected';
+                        });
+
+                        currentCall.on('close', () => {
+                            console.log('Kết nối đã đóng');
+                            remoteVideo.srcObject = null;
+                            remoteVideo.style.display = 'none';
+                            loading.style.display = 'none';
+                            connectSection.style.display = 'block';
+                            status.textContent = 'Kết nối đã đóng. Nhập ID mới để kết nối lại.';
+                            status.className = 'status waiting';
+                            currentCall = null;
+                        });
+
+                        currentCall.on('error', (err) => {
+                            console.error('Call error:', err);
+                            status.textContent = 'Lỗi kết nối: ' + (err.message || 'Vui lòng thử lại');
+                            status.className = 'status error';
+                            loading.style.display = 'none';
+                            connectSection.style.display = 'block';
+                        });
+                    } else {
+                        // Đợi peer mở
+                        setTimeout(waitForPeer, 100);
+                    }
+                };
+
+                waitForPeer();
+
+            } catch (error) {
+                console.error('Lỗi khi kết nối:', error);
+                status.textContent = 'Lỗi: ' + error.message;
+                status.className = 'status error';
+                loading.style.display = 'none';
+                connectSection.style.display = 'block';
+            }
+        }
+
+        // Khởi tạo khi trang load
+        initPeer();
+    </script>
+</body>
+</html>
+
